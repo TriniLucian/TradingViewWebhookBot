@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: tradingview-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    plan: free
+    envVars:
+      - key: BYBIT_API_KEY
+        value: your_bybit_api_key_here
+      - key: BYBIT_SECRET_KEY
+        value: your_bybit_secret_key_here
