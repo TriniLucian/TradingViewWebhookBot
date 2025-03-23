@@ -7,38 +7,40 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+
 app = Flask(__name__)
 
 API_KEY = os.getenv("BYBIT_API_KEY")
 API_SECRET = os.getenv("BYBIT_SECRET_KEY")
 
+
 @app.route('/')
 def home():
     return "✅ Webhook server is live!"
 
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        data = request.json
-        print("Received alert:", data)
+        data = request.get_json()
+        print("Incoming webhook payload:", data)
 
-        symbol = data.get("symbol")
-        side = data.get("action").upper()
-        qty = data.get("qty", 10)
+        symbol = data['symbol']
+        side = data['action']
+        qty = data['qty']
 
-        if symbol and side in ["BUY", "SELL"]:
-            result = place_order(symbol, side, qty)
-            return jsonify(result), 200
-        else:
-            return jsonify({"error": "Invalid payload"}), 400
+        response = place_order(symbol, side, qty)
+        return jsonify(response)
 
     except Exception as e:
+        print("Error in webhook:", str(e))
         return jsonify({"error": str(e)}), 500
+
 
 def place_order(symbol, side, qty):
     timestamp = int(time.time() * 1000)
-
     url = "https://api.bybit.com/v5/order/create"
+
     headers = {
         "X-BAPI-API-KEY": API_KEY,
         "X-BAPI-TIMESTAMP": str(timestamp),
@@ -66,6 +68,6 @@ def place_order(symbol, side, qty):
     print("Bybit response:", response.text)
     return response.json()
 
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
-
