@@ -7,7 +7,6 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
-
 app = Flask(__name__)
 
 API_KEY = os.getenv("BYBIT_API_KEY")
@@ -20,66 +19,52 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        data = request.get_json()
-        print("📩 Webhook received:", data)
+        data = request.json
+        print("Received alert:", data)
 
-        if not data or 'symbol' not in data or 'side' not in data or 'qty' not in data:
+        symbol = data.get("symbol")
+        side = data.get("action").upper()
+        qty = data.get("qty", 10)
+
+        if symbol and side in ["BUY", "SELL"]:
+            result = place_order(symbol, side, qty)
+            return jsonify(result), 200
+        else:
             return jsonify({"error": "Invalid payload"}), 400
 
-        symbol = data['symbol']
-        side = data['side'].upper()
-        qty = str(data['qty'])
-
-        print(f"➡️ Order Info: {side} {qty} of {symbol}")
-
-        # Step 2: Create order payload
-        timestamp = str(int(time.time() * 1000))
-        order_data = {
-            "category": "spot",
-            "symbol": symbol,
-            "side": side,
-            "orderType": "Market",
-            "qty": qty,
-            "timestamp": timestamp,
-            "apiKey": API_KEY
-        }
-
-        # Step 3: Generate signature
-        param_str = '&'.join([f"{key}={value}" for key, value in sorted(order_data.items())])
-        signature = hmac.new(
-            bytes(API_SECRET, "utf-8"),
-            bytes(param_str, "utf-8"),
-            hashlib.sha256
-        ).hexdigest()
-
-        headers = {
-            "Content-Type": "application/json",
-            "X-BYBIT-SIGN": signature
-        }
-
-        print("🔐 Signature:", signature)
-
-        url = "https://api.bybit.com/spot/v3/private/order"
-        response = requests.post(url, json=order_data, headers=headers)
-
-        try:
-            result = response.json()
-        except ValueError:
-            print("❌ Bybit returned non-JSON:", response.text)
-            return jsonify({"error": "Invalid response from Bybit"}), 500
-
-        print("📩 Response from Bybit:", result)
-
-        if result.get("retCode") == 0:
-            return jsonify({"message": "✅ Trade placed successfully"}), 200
-        else:
-            return jsonify({
-                "error": result.get("retMsg", "Bybit API error")
-            }), 400
-
     except Exception as e:
-        print("❌ Error occurred:", str(e))
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+def place_order(symbol, side, qty):
+    timestamp = int(time.time() * 1000)
+
+    url = "https://api.bybit.com/v5/order/create"
+    headers = {
+        "X-BAPI-API-KEY": API_KEY,
+        "X-BAPI-TIMESTAMP": str(timestamp),
+        "X-BAPI-RECV-WINDOW": "5000",
+        "Content-Type": "application/json"
+    }
+
+    body = {
+        "category": "spot",
+        "symbol": symbol,
+        "side": side,
+        "orderType": "Market",
+        "qty": str(qty)
+    }
+
+    # Create signature
+    import json
+    param_str = json.dumps(body, separators=(',', ':'))
+    sign_payload = f"{timestamp}{API_KEY}5000{param_str}"
+    signature = hmac.new(bytes(API_SECRET, "utf-8"), sign_payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    headers["X-BAPI-SIGN"] = signature
+
+    # Send request
+    response = requests.post(url, headers=headers, json=body)
+    print("Bybit response:", response.text)
+    return response.json()
+
+if __name__ == "__main__":
+    app.run(debug=True)
